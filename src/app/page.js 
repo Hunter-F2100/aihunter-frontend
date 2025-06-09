@@ -1,0 +1,230 @@
+// 如果您使用的是 App Router (即文件在 `app/` 目录下)，请在文件顶部添加这一行：
+'use client'; 
+
+import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
+
+const HomePage = () => {
+  const [searchText, setSearchText] = useState('');
+  const [candidates, setCandidates] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10; // 与后端每页数量保持一致
+  const [totalPages, setTotalPages] = useState(0);
+  const [loading, setLoading] = useState(false); // 添加加载状态
+  const [error, setError] = useState(null); // 添加错误状态
+
+  const companyLogoPath = '/HLG-logo.png'; 
+  const logoBlueColorClass = 'bg-blue-600 hover:bg-blue-700';
+
+  // 用于执行搜索和更新分页数据的函数
+  const performSearch = async (page = 1) => { // 添加 async 关键字
+    setLoading(true); // 开始加载
+    setError(null); // 清除之前的错误
+
+    // 如果搜索关键词为空，则直接提示用户，不发送请求
+    if (!searchText.trim()) { // 使用 trim() 移除前后空格
+      setError("请输入搜索关键词。");
+      setLoading(false);
+      setCandidates([]);
+      setTotalPages(0);
+      setCurrentPage(1);
+      return; // 提前退出
+    }
+
+    // 这是您的 Flask 后端 API 的地址
+    const backendUrl = `http://127.0.0.1:5000/search?q=<span class="math-inline">\{searchText\}&page\=</span>{page}`; 
+
+    try {
+      const response = await fetch(backendUrl); // 发送请求
+      if (!response.ok) {
+        // 如果响应状态码不是 2xx，抛出错误
+        const errorData = await response.json();
+        throw new Error(errorData.message || `请求失败，状态码: ${response.status}`);
+      }
+      const data = await response.json(); // 解析 JSON 数据
+
+      setCandidates(data.candidates);
+      setTotalPages(Math.ceil(data.total_count / itemsPerPage)); // 根据后端返回的总数计算总页数
+      setCurrentPage(page);
+
+    } catch (err) {
+      console.error("搜索请求失败:", err);
+      // 设置用户可见的错误信息，并增加一个检查，如果是“请输入搜索关键词”，则显示更友好的提示
+      if (err.message === "请输入搜索关键词") {
+         setError("请输入搜索关键词。");
+      } else {
+         setError(`搜索失败: ${err.message || "未知错误，请检查后端服务。"}`);
+      }
+      setCandidates([]); // 错误时清空候选人
+      setTotalPages(0);
+    } finally {
+      setLoading(false); // 停止加载
+    }
+  };
+
+  const handleSearch = () => {
+    performSearch(1); // 点击搜索按钮时，总是从第一页开始搜索
+  };
+
+  // 处理分页按钮点击事件
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      performSearch(newPage); // 执行新页的搜索
+    }
+  };
+
+  // 组件第一次加载时，自动执行一次搜索（如果搜索框有默认关键词，或想立即显示数据）
+  // 这里可以设置一个默认的关键词，比如 `useState('react')`
+  useEffect(() => {
+    // 如果您希望页面加载时就显示数据，可以在这里设置一个默认关键词并调用 performSearch
+    // 例如：setSearchText('react'); // 设置默认关键词
+    performSearch(1); // 页面加载后自动显示第一页数据
+  }, []); // [] 表示只在组件挂载时执行一次
+
+
+  return (
+    <div className="min-h-screen flex flex-col items-center bg-white p-4 pt-20">
+      {/* 公司 Logo 和标题的区域 */}
+      <div className="flex items-center mb-8">
+        {companyLogoPath && (
+          <Image
+            src={companyLogoPath}
+            alt="HLG Logo"
+            width={90}
+            height={90}
+            className="mr-3"
+            priority
+          />
+        )}
+        <h1 className="text-5xl font-extrabold text-gray-900">猎头搜索工具</h1>
+      </div>
+
+      {/* 搜索框和搜索按钮的区域 */}
+      <div className="w-full max-w-md flex items-center space-x-3">
+        {/* 搜索输入框 */}
+        <input
+          type="text"
+          placeholder="请输入英文关键词..."
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          className="flex-grow p-4 border border-gray-300 rounded-xl shadow-sm focus:outline-none focus:ring-3 focus:ring-blue-500 focus:border-transparent text-lg text-gray-700 placeholder-gray-400"
+        />
+        {/* 搜索按钮 */}
+        <button
+          onClick={handleSearch}
+          disabled={loading} // 搜索进行中时禁用按钮
+          className={`${logoBlueColorClass} text-white px-8 py-4 rounded-xl shadow-md transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-3 focus:ring-blue-500 focus:ring-opacity-60 text-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed`}
+        >
+          {loading ? '搜索中...' : '搜索'}
+        </button>
+      </div>
+
+      {/* 错误信息显示 */}
+      {error && <p className="text-red-500 mt-4 text-center">{error}</p>}
+
+      {/* 根据加载状态和数据是否存在显示不同内容 */}
+      {!loading && candidates.length === 0 && !error && searchText && (
+        <p className="text-center text-gray-500 mt-12">没有找到符合条件的候选人。</p>
+      )}
+      {!loading && candidates.length === 0 && !error && !searchText && (
+        <p className="text-center text-gray-500 mt-12">请输入关键词，点击“搜索”按钮。</p>
+      )}
+      {loading && (
+        <p className="text-center text-gray-500 mt-12">正在加载候选人...</p>
+      )}
+
+      {/* 候选人搜索结果容器：只有在加载完成且有数据时才显示 */}
+      {!loading && candidates.length > 0 && (
+        <div className="w-full max-w-4xl mt-12 grid grid-cols-1 gap-6">
+          {candidates.map((candidate) => (
+            <div key={candidate.id} className="bg-white rounded-xl shadow-lg p-6 flex flex-col md:flex-row md:items-start space-y-4 md:space-y-0 md:space-x-8 border border-gray-200">
+              {/* 左侧：GitHub 头像和主页按钮 */}
+              <div className="flex flex-col items-center space-y-3 pr-4">
+                {/* GitHub 头像 */}
+                <div className="w-24 h-24 bg-gray-200 rounded-full flex items-center justify-center text-gray-500 text-sm overflow-hidden">
+                  {/* 如果头像链接存在，使用 Image 组件 */}
+                  {candidate.githubAvatar ? (
+                    <Image
+                      src={candidate.githubAvatar}
+                      alt={`${candidate.name} GitHub Avatar`}
+                      width={96}
+                      height={96}
+                      className="rounded-full object-cover"
+                    />
+                  ) : (
+                    // 否则显示一个默认的 GitHub 图标
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-16 h-16 text-gray-400">
+                      <path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.477-1.11-1.477-.908-.62.069-.608.069-.608 1.004.072 1.531 1.032 1.531 1.032.892 1.529 2.341 1.089 2.91.832.092-.647.35-1.089.636-1.339-2.22-.253-4.555-1.119-4.555-4.976 0-1.109.376-2.019 1.03-2.723-.104-.254-.447-1.292.097-2.691 0 0 .84-.272 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.7.111 2.5.305 1.902-1.298 2.747-1.026 2.747-1.026.546 1.399.203 2.437.096 2.691.654.704 1.03 1.614 1.03 2.723 0 3.867-2.334 4.722-4.56 4.976.354.305.678.915.678 1.846 0 1.334-.012 2.41-.012 2.727 0 .266.18.593.687.485C21.133 20.2 24 16.435 24 12.017 24 6.484 19.522 2 14 2h-2z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </div>
+                {/* GitHub 主页按钮 */}
+                <a href={candidate.githubUrl} target="_blank" rel="noopener noreferrer" className="bg-gray-800 text-white px-4 py-2 rounded-lg text-sm flex items-center space-x-2 hover:bg-gray-700 transition-colors duration-200">
+                  {/* GitHub 小猫图标 SVG */}
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                    <path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.477-1.11-1.477-.908-.62.069-.608.069-.608 1.004.072 1.531 1.032 1.531 1.032.892 1.529 2.341 1.089 2.91.832.092-.647.35-1.089.636-1.339-2.22-.253-4.555-1.119-4.555-4.976 0-1.109.376-2.019 1.03-2.723-.104-.254-.447-1.292.097-2.691 0 0 .84-.272 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.7.111 2.5.305 1.902-1.298 2.747-1.026 2.747-1.026.546 1.399.203 2.437.096 2.691.654.704 1.03 1.614 1.03 2.723 0 3.867-2.334 4.722-4.56 4.976.354.305.678.915.678 1.846 0 1.334-.012 2.41-.012 2.727 0 .266.18.593.687.485C21.133 20.2 24 16.435 24 12.017 24 6.484 19.522 2 14 2h-2z" clipRule="evenodd" />
+                    </svg>
+                    <span>GitHub 主页</span>
+                  </a>
+                </div>
+
+                {/* 右侧：候选人信息 */}
+                <div className="flex-grow space-y-2 text-gray-800">
+                  <h2 className="text-xl font-semibold">{candidate.name || 'N/A'}</h2>
+                  <p className="text-gray-600">邮箱：{candidate.email || 'N/A'}</p>
+                  {candidate.website && (
+                    <p className="text-gray-600">个人网站：<a href={candidate.website} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">{candidate.website.replace(/(^\w+:|^)\/\//, '')}</a></p>
+                  )}
+                  <p className="text-gray-600">公司：{candidate.company || 'N/A'}</p>
+                  <p className="text-gray-600">
+                    技术标签：
+                    {candidate.skills && candidate.skills.length > 0 ? (
+                      candidate.skills.map((skill, index) => (
+                        <span key={index} className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full mr-2 mb-1 inline-block">
+                          {skill}
+                        </span>
+                      ))
+                    ) : (
+                      <span>N/A</span>
+                    )}
+                  </p>
+                  <p className="text-gray-600">地址：{candidate.location || 'N/A'}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 分页导航按钮 */}
+        {totalPages > 1 && (
+          <div className="flex justify-center mt-8 space-x-4">
+            <button
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1 || loading}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              上一页
+            </button>
+            <span className="text-gray-700 text-lg font-semibold flex items-center">
+              {currentPage} / {totalPages}
+            </span>
+            <button
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages || loading}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              下一页
+            </button>
+          </div>
+        )}
+        
+        {/* 页面底部可以放置一些额外内容或占位符 */}
+        <div className="mt-12 text-gray-500 text-sm">
+          <p>提供基于AI的专业猎头搜索服务</p>
+        </div>
+      </div>
+    );
+  };
+
+  export default HomePage;
+    ```
