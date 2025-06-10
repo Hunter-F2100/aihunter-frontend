@@ -1,20 +1,20 @@
 // 声明为客户端组件，以使用 React Hooks 和事件处理
 'use client';
 
-// ✅ 添加这一行，禁用静态预渲染，解决 useSearchParams 部署报错问题
+// 【修复】强制页面进行动态渲染，以解决 useSearchParams 在部署时的静态预渲染冲突问题
 export const dynamic = 'force-dynamic';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react'; // 【修复】确保 useEffect 被正确导入
 import Image from 'next/image';
 import { useSession, signIn, signOut } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 // --- 主页面组件 ---
 const HomePage = () => {
-  // 【修复】所有 Hooks 在此处统一声明，避免重复，提高代码可读性
+  // --- Hooks 统一声明区 ---
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { data: session, status } = useSession(); // status 可为 'loading', 'authenticated', 'unauthenticated'
+  const { data: session, status } = useSession(); // status: 'loading', 'authenticated', 'unauthenticated'
 
   // --- 登录表单状态 ---
   const [username, setUsername] = useState('');
@@ -32,7 +32,7 @@ const HomePage = () => {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   // --- 常量定义 ---
-  const API_BASE_URL = 'http://127.0.0.1:5000';
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000';
   const ITEMS_PER_PAGE = 10;
   const COMPANY_LOGO_PATH = '/HLG-logo.png';
   const LOGO_BLUE_COLOR_CLASS = 'bg-blue-600 hover:bg-blue-700';
@@ -44,12 +44,16 @@ const HomePage = () => {
     setLoginError('');
     try {
       const result = await signIn('credentials', {
-        username: username, // 使用 'username' 键以保持一致性
+        username: username,
         password,
         redirect: false,
       });
       if (result?.error) {
         setLoginError('用户名或密码错误，请重试。');
+      } else {
+        // 登录成功后清空表单
+        setUsername('');
+        setPassword('');
       }
     } catch (error) {
       console.error('登录时发生意外错误:', error);
@@ -67,9 +71,7 @@ const HomePage = () => {
   // --- 核心搜索函数 (由 URL 参数驱动) ---
   const performSearch = async (query, page) => {
     if (!query) {
-      setCandidates([]);
-      setTotalPages(0);
-      setIsInitialLoad(true);
+      // 外部已处理，此函数仅在 query 有效时调用
       return;
     }
 
@@ -99,31 +101,34 @@ const HomePage = () => {
     }
   };
 
-  // --- useEffect 用于监听 URL 变化并触发搜索 ---
+  // --- useEffect 用于监听 URL 和会话状态变化 ---
   useEffect(() => {
-    const queryFromUrl = searchParams.get('q');
-    const pageFromUrl = parseInt(searchParams.get('page') || '1', 10);
-    
-    setSearchText(queryFromUrl || '');
-    
-    // 只有在用户已认证的情况下才执行搜索
+    // 只有在用户已认证的情况下才处理搜索逻辑
     if (status === 'authenticated') {
+      const queryFromUrl = searchParams.get('q');
+      const pageFromUrl = parseInt(searchParams.get('page') || '1', 10);
+      
+      // 同步输入框内容与 URL 参数
+      setSearchText(queryFromUrl || '');
+      
       if (queryFromUrl) {
         performSearch(queryFromUrl, pageFromUrl);
       } else {
+        // 如果已登录但 URL 中没有 query，则清空结果并显示初始提示
         setCandidates([]);
         setTotalPages(0);
         setCurrentPage(1);
         setIsInitialLoad(true);
+        setSearchError(null);
       }
     }
-  }, [searchParams, status]); // 依赖项新增 status，确保登录后能触发
+  }, [searchParams, status]); // 依赖项：URL 参数和会话状态
 
   // --- 事件处理器 (只负责更新 URL) ---
   const handleSearchClick = () => {
     if (!searchText.trim()) {
-        setSearchError('请输入有效的搜索关键词。');
-        return;
+      setSearchError('请输入有效的搜索关键词。');
+      return;
     }
     router.push(`/?q=${searchText}&page=1`);
   };
@@ -134,21 +139,22 @@ const HomePage = () => {
 
   const handlePageChange = (newPage) => {
     const currentQuery = searchParams.get('q');
-    if (currentQuery) {
+    if (currentQuery && !loading) {
       router.push(`/?q=${currentQuery}&page=${newPage}`);
     }
   };
 
-  // 如果会话状态正在加载中，可以显示一个全局的加载提示
+  // --- 渲染逻辑 ---
+
+  // 在确定会话状态前，显示全局加载提示，防止页面闪烁
   if (status === 'loading') {
     return (
-        <div className="min-h-screen flex justify-center items-center">
-            <p className="text-gray-500">会话加载中...</p>
+        <div className="min-h-screen flex justify-center items-center bg-white">
+            <p className="text-gray-500 text-xl font-semibold">会话加载中...</p>
         </div>
     );
   }
 
-  // --- 主渲染逻辑 ---
   return (
     <div className="min-h-screen flex flex-col items-center bg-white p-4 sm:p-8 pt-16 sm:pt-20">
       <header className="w-full max-w-4xl flex items-center justify-center mb-10">
@@ -159,11 +165,13 @@ const HomePage = () => {
           <h1 className="text-4xl sm:text-5xl font-extrabold text-gray-900">猎头搜索工具</h1>
         </div>
       </header>
-
+      
       {/* 根据会话状态显示登录表单或搜索工具 */}
       {status === 'unauthenticated' ? (
         <main className="w-full max-w-sm">
           <form onSubmit={handleLoginSubmit} className="bg-white shadow-md rounded-lg px-8 pt-6 pb-8 mb-4">
+            <h2 className="text-xl font-bold mb-4 text-center text-gray-800">请登录</h2>
+            {loginError && <p className="text-red-500 text-xs italic text-center mb-4">{loginError}</p>}
             <div className="mb-4">
               <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="username">用户名</label>
               <input id="username" type="text" value={username} onChange={(e) => setUsername(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" placeholder="Username" />
@@ -177,15 +185,14 @@ const HomePage = () => {
                 {isLoggingIn ? '登录中...' : '登录'}
               </button>
             </div>
-            {loginError && <p className="text-red-500 text-xs italic text-center mt-4">{loginError}</p>}
+            <p className="text-center text-gray-500 text-xs mt-4">测试账号: `admin` / `password123`</p>
           </form>
-          <p className="text-center text-gray-500 text-xs">测试账号: `admin` / `password123`</p>
         </main>
       ) : (
         <main className="w-full max-w-4xl">
           <div className="flex justify-between items-center mb-6 px-2">
             <p className="text-gray-600">欢迎, <span className="font-semibold">{session?.user?.name || session?.user?.email}</span>!</p>
-            <button onClick={handleLogout} className="text-sm text-blue-600 hover:underline">退出</button>
+            <button onClick={handleLogout} className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded-md text-sm transition-colors duration-200">退出</button>
           </div>
           <div className="w-full max-w-xl flex items-center space-x-3 mx-auto">
             <input type="text" placeholder="请输入英文关键词..." value={searchText} onChange={(e) => setSearchText(e.target.value)} onKeyPress={handleKeyPress} className="flex-grow p-4 border border-gray-300 rounded-xl shadow-sm focus:outline-none focus:ring-3 focus:ring-blue-500 focus:border-transparent text-lg text-gray-700 placeholder-gray-400" />
@@ -202,7 +209,7 @@ const HomePage = () => {
               <div className="grid grid-cols-1 gap-6">
                 {candidates.map((candidate) => (
                   <div key={candidate.id} className="bg-white rounded-xl shadow-lg p-6 flex flex-col md:flex-row md:items-center space-y-6 md:space-y-0 md:space-x-6 border border-gray-200 hover:shadow-xl transition-shadow duration-300">
-                    <div className="flex-shrink-0 flex flex-col items-center space-y-4 w-full md:w-36">
+                    <div className="flex-shrink-0 flex flex-col items-center justify-center space-y-4 w-full md:w-36">
                       <Image src={candidate.githubAvatar || '/default-avatar.png'} alt={`${candidate.name || 'Candidate'} GitHub Avatar`} width={96} height={96} className="rounded-full object-cover border-2 border-gray-300" />
                       <a href={candidate.githubUrl} target="_blank" rel="noopener noreferrer" className="bg-gray-800 text-white px-4 py-2 rounded-lg text-sm w-full text-center flex items-center justify-center space-x-2 hover:bg-gray-700 transition-colors duration-200">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.477-1.11-1.477-.908-.62.069-.608.069-.608 1.004.072 1.531 1.032 1.531 1.032.892 1.529 2.341 1.089 2.91.832.092-.647.35-1.089.636-1.339-2.22-.253-4.555-1.119-4.555-4.976 0-1.109.376-2.019 1.03-2.723-.104-.254-.447-1.292.097-2.691 0 0 .84-.272 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.7.111 2.5.305 1.902-1.298 2.747-1.026 2.747-1.026.546 1.399.203 2.437.096 2.691.654.704 1.03 1.614 1.03 2.723 0 3.867-2.334 4.722-4.56 4.976.354.305.678.915.678 1.846 0 1.334-.012 2.41-.012 2.727 0 .266.18.593.687.485C21.133 20.2 24 16.435 24 12.017 24 6.484 19.522 2 12 2z"/></svg>
