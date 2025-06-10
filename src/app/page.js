@@ -1,6 +1,9 @@
 // 声明为客户端组件，以使用 React Hooks 和事件处理
 'use client';
 
+// ✅ 添加这一行，禁用静态预渲染，解决 useSearchParams 部署报错问题
+export const dynamic = 'force-dynamic';
+
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { useSession, signIn, signOut } from 'next-auth/react';
