@@ -14,14 +14,14 @@ const handler = NextAuth({
     CredentialsProvider({
       name: "Credentials",
       credentials: {
-        // [MODIFIED] 使用 email 作为登录字段，与前端和后端保持一致
-        email: { label: "邮箱", type: "text", placeholder: "请输入邮箱" },
-        password: { label: "密码", type: "password", placeholder: "请输入密码" },
+        username: { label: 'Username', type: 'text' },
+        password: { label: 'Password', type: 'password' },
       },
+
       async authorize(credentials, req) {
         log('Authorize', 'Function started.');
         
-        if (!credentials?.email || !credentials?.password) {
+        if (!credentials?.username || !credentials?.password) {
           log('Authorize', 'Error: Missing credentials.');
           return null;
         }
@@ -38,7 +38,7 @@ const handler = NextAuth({
             },
             body: JSON.stringify({
               // [FINAL FIX] 将键名从 'email' 改为 'username' 以匹配后端要求
-              username: credentials.email, 
+              username: credentials.username, 
               password: credentials.password,
             }),
           });
