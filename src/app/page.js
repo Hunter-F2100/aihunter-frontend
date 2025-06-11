@@ -212,7 +212,6 @@ const MainSearchComponent = () => {
                 {isLoggingIn ? '登录中...' : '登录'}
               </button>
             </div>
-            <p className="text-center text-gray-500 text-xs mt-4">测试账号: admin / password123</p>
           </form>
         </main>
       ) : (
