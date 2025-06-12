@@ -39,7 +39,7 @@ const MainSearchComponent = () => {
     setLoginError('');
     try {
       const result = await signIn('credentials', {
-        username: username,
+        username: username.trim(),
         password,
         redirect: false,
       });
